@@ -1,0 +1,401 @@
+1) #############  PIG SCRIPT   #############
+
+---------------------- SOLUTION 1---------------------------------------
+Crimes = LOAD '/home/acadgild/Desktop/Abhinav/Crimes_-_2001_to_present.csv50' USING PigStorage(',') AS (ID,CasNum,Date,Block,IUCR,PType,Des,LocDesc,Arrest,Dome,Beat,District,Ward,ComAr,FBICode,XCo,YCo,Year,UpdatedOn,Lat,Long,Coor);
+GroupFbi = GROUP Crimes BY FBICode;
+CountFbiCases = FOREACH GroupFbi GENERATE group, COUNT(Crimes);
+DUMP CountFbiCases;
+
+---------------------- SOLUTION 2 -----------------------------------------------------
+
+CaseFbi08B = FILTER CountFbiCases BY (group == '08B');
+DUMP CaseFbi08B;
+
+---------------------- SOLUTION 3 ------------------------------------------------------
+
+TheftArrests = FILTER Crimes BY (PType matches '.*THEFT.*' AND Arrest == 'false' );
+GroupTheftArrests = GROUP TheftArrests BY District;
+CountTheftArrests = FOREACH GroupTheftArrests GENERATE group, COUNT(TheftArrests);
+DUMP CountTheftArrests;
+
+---------------------- SOLUTION 4 -------------------------------------------------------------
+
+Arrest14n15 = FOREACH Crimes GENERATE Arrest, DaysBetween(ToDate(Date,'dd/MM/yyyy HH:mm:ss a'), ToDate('01/10/2014 00:00:00 AM','dd/MM/yyyy HH:mm:ss a')) AS Start, DaysBetween(ToDate('31/10/2015 00:00:00 AM', 'dd/MM/yyyy HH:mm:ss a'), ToDate(Date, 'dd/MM/yyyy HH:mm:ss a')) AS End;
+
+FilterArrest14n15 = FILTER Arrest14n15 BY (Arrest=='true') AND (Start>0) AND (End>0);
+
+CountArrest14n15 = FOREACH (GROUP FilterArrest14n15 ALL) GENERATE COUNT(FilterArrest14n15);
+
+DUMP CountArrest14n15;
+---------------------------------------------------------------------------------------------
+
+
+2) #############  MAP REDUCE   #############
+
+
+---------------------- SOLUTION 1 -----------------------------------------------------
+
+package FbiCases;
+
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable;
+import java.io.IOException;
+public class FbiCodeMapper extends Mapper<LongWritable,Text,Text,IntWritable>  
+{
+	@Override
+	protected void map(LongWritable key, Text value, Context context)
+	throws IOException, InterruptedException{
+		String[] values = value.toString().split(",");
+		context.write(new Text(values[14]), new IntWritable(1));
+	}
+}
+
+package FbiCases;
+
+import java.io.IOException;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+public class FbiCodeReducer extends Reducer<Text,IntWritable,Text,IntWritable>{
+	@Override
+	public void reduce(Text key, Iterable<IntWritable> value, Context context)
+	throws IOException, InterruptedException
+	{
+		int sum=0;
+		for(IntWritable values : value)
+		{
+			sum = sum+values.get();
+		}
+		context.write(key, new IntWritable(sum));
+	}
+}
+
+package FbiCases;
+
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.fs.Path;
+public class FbiCodeDriver extends Configured implements Tool{
+
+	public static void main(String[] abhi) throws Exception{
+		ToolRunner.run(new Configuration(),new FbiCodeDriver(), abhi);
+	}
+
+	@Override
+	public int run(String[] abhi) throws Exception{
+		//Configuration conf = new Configuration();
+		//Job job = new Job(conf, "Abhinav");
+		Job job = Job.getInstance();
+		job.setJobName("Abhinav FBI Code");
+		job.setJarByClass(FbiCodeDriver.class);
+		
+		job.setMapperClass(FbiCodeMapper.class);
+		job.setReducerClass(FbiCodeReducer.class);
+		
+		job.setMapOutputKeyClass(Text.class);
+		job.setMapOutputValueClass(IntWritable.class);
+		
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(IntWritable.class);
+		
+		job.setInputFormatClass(TextInputFormat.class);
+		
+		FileInputFormat.addInputPath(job, new Path(abhi[0]));
+		FileOutputFormat.setOutputPath(job, new Path(abhi[1]));
+		
+		job.waitForCompletion(true);
+		return 0;
+	}
+	
+}
+
+---------------------- SOLUTION 2 -----------------------------------------------------
+package FbiCases;
+
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable;
+import java.io.IOException;
+public class FbiCodeMapper extends Mapper<LongWritable,Text,Text,IntWritable>  
+{
+	@Override
+	protected void map(LongWritable key, Text value, Context context)
+	throws IOException, InterruptedException{
+		String[] values = value.toString().split(",");
+		if (values[14].equalsIgnoreCase("08A"))
+		{
+		context.write(new Text(values[14]), new IntWritable(1));
+		}
+	}
+}
+
+package FbiCases;
+
+import java.io.IOException;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+public class FbiCodeReducer extends Reducer<Text,IntWritable,Text,IntWritable>{
+	@Override
+	public void reduce(Text key, Iterable<IntWritable> value, Context context)
+	throws IOException, InterruptedException
+	{
+		int sum=0;
+		for(IntWritable values : value)
+		{
+			sum = sum+values.get();
+		}
+		context.write(key, new IntWritable(sum));
+	}
+}
+
+
+package FbiCases;
+
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.fs.Path;
+public class FbiCodeDriver extends Configured implements Tool{
+
+	public static void main(String[] abhi) throws Exception{
+		ToolRunner.run(new Configuration(),new FbiCodeDriver(), abhi);
+	}
+
+	@Override
+	public int run(String[] abhi) throws Exception{
+		//Configuration conf = new Configuration();
+		//Job job = new Job(conf, "Abhinav");
+		Job job = Job.getInstance();
+		job.setJobName("Abhinav FBI Code");
+		job.setJarByClass(FbiCodeDriver.class);
+		
+		job.setMapperClass(FbiCodeMapper.class);
+		job.setReducerClass(FbiCodeReducer.class);
+		
+		job.setMapOutputKeyClass(Text.class);
+		job.setMapOutputValueClass(IntWritable.class);
+		
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(IntWritable.class);
+		
+		job.setInputFormatClass(TextInputFormat.class);
+		
+		FileInputFormat.addInputPath(job, new Path(abhi[0]));
+		FileOutputFormat.setOutputPath(job, new Path(abhi[1]));
+		
+		job.waitForCompletion(true);
+		return 0;
+	}
+	
+}
+
+---------------------- SOLUTION 3 -----------------------------------------------------
+
+package FbiCases;
+
+import java.io.IOException;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable;
+
+public class FliTheftMapper  extends Mapper<LongWritable,Text,Text,IntWritable>{
+	
+	@Override
+	protected void map(LongWritable key, Text value, Context context)
+	throws IOException, InterruptedException{
+		String[] values = value.toString().split(",");
+		final int One=1;
+		if(values[5].toUpperCase().contains("THEFT") && values[8].equalsIgnoreCase("false"))
+		{
+			context.write(new Text(values[11]), new IntWritable(One));
+		}
+		
+	}
+
+
+}
+
+package FbiCases;
+
+import java.io.IOException;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable; 
+
+public class FbiTheftReducer extends Reducer<Text, IntWritable, Text, IntWritable>{
+	
+	@Override
+	public void reduce(Text key, Iterable<IntWritable> value, Context context)
+	throws IOException, InterruptedException{
+		int sum=0;
+		for (IntWritable values : value)
+		{
+		sum=sum+values.get();
+		}
+	context.write(key, new IntWritable(sum));	
+	}
+
+}
+
+package FbiCases;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.fs.Path;
+
+public class FbiTheft extends Configured implements Tool{
+	
+	public static void main(String[] abhi) throws Exception {
+	ToolRunner.run(new Configuration(), new FbiTheft(), abhi);
+	}
+	@Override
+	public int run(String[] abhi) throws Exception{
+		//Configuration conf = new Configuration();
+		Job job = Job.getInstance();
+		job.setJobName("Abhi Count Theft By District");
+		job.setJarByClass(FbiTheft.class);
+		
+		job.setMapperClass(FliTheftMapper.class);
+		job.setReducerClass(FbiTheftReducer.class);
+		
+		job.setMapOutputKeyClass(Text.class);
+		job.setMapOutputValueClass(IntWritable.class);
+		
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(IntWritable.class);
+		
+		job.setInputFormatClass(TextInputFormat.class);
+		
+		FileInputFormat.addInputPath(job, new Path(abhi[0]));
+		FileOutputFormat.setOutputPath(job, new Path(abhi[1]));
+		
+		job.waitForCompletion(true);
+		return 0;
+	}
+}
+
+---------------------- SOLUTION 4 -----------------------------------------------------
+
+package FbiCases;
+
+import java.io.IOException;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable;
+
+public class FliTheftMapper  extends Mapper<LongWritable,Text,Text,IntWritable>{
+	
+	@Override
+	protected void map(LongWritable key, Text value, Context context)
+	throws IOException, InterruptedException{
+		String[] values = value.toString().split(",");
+		final int One=1;
+		if(values[5].toUpperCase().contains("THEFT") && values[8].equalsIgnoreCase("false"))
+		{
+			context.write(new Text(values[11]), new IntWritable(One));
+		}
+		
+	}
+
+
+}
+
+
+package FbiCases;
+
+import java.io.IOException;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable; 
+
+public class FbiTheftReducer extends Reducer<Text, IntWritable, Text, IntWritable>{
+	
+	@Override
+	public void reduce(Text key, Iterable<IntWritable> value, Context context)
+	throws IOException, InterruptedException{
+		int sum=0;
+		for (IntWritable values : value)
+		{
+		sum=sum+values.get();
+		}
+	context.write(key, new IntWritable(sum));	
+	}
+
+}
+
+
+package FbiCases;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.fs.Path;
+
+public class FbiTheft extends Configured implements Tool{
+	
+	public static void main(String[] abhi) throws Exception {
+	ToolRunner.run(new Configuration(), new FbiTheft(), abhi);
+	}
+	@Override
+	public int run(String[] abhi) throws Exception{
+		//Configuration conf = new Configuration();
+		Job job = Job.getInstance();
+		job.setJobName("Abhi Count Theft By District");
+		job.setJarByClass(FbiTheft.class);
+		
+		job.setMapperClass(FliTheftMapper.class);
+		job.setReducerClass(FbiTheftReducer.class);
+		
+		job.setMapOutputKeyClass(Text.class);
+		job.setMapOutputValueClass(IntWritable.class);
+		
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(IntWritable.class);
+		
+		job.setInputFormatClass(TextInputFormat.class);
+		
+		FileInputFormat.addInputPath(job, new Path(abhi[0]));
+		FileOutputFormat.setOutputPath(job, new Path(abhi[1]));
+		
+		job.waitForCompletion(true);
+		return 0;
+	}
+}
+
+---------------------------------------------------------------------------------------------
